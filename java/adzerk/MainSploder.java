@@ -64,7 +64,7 @@ class MainSploder {
   public static void main(String [] args) throws Exception {
     File thisJar      = getThisJar();
     URL[] jarUrls     = getJarURLs(thisJar);
-    ClassLoader cl    = new URLClassLoader(jarUrls, Thread.currentThread().getContextClassLoader());
+    ClassLoader cl    = new URLClassLoader(jarUrls, MainSploder.class.getClassLoader());
 
     Class rtClass     = cl.loadClass("org.projectodd.shimdandy.ClojureRuntimeShim");
 
