@@ -7,8 +7,9 @@
 
 ## Usage
 
-    $ boot -d org.clojure/clojure ubermain -m clojure.core/println
-    $ java -jar target/project.jar
+    $ boot -d org.clojure/clojure -d adzerk/boot-ubermain:1.0.0-SNAPSHOT ubermain -m clojure.core/println
+    $ java -jar target/project.jar Hello from Clojure!
+    Hello from Clojure!
 
 ## License
 
