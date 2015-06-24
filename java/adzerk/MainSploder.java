@@ -4,20 +4,19 @@ import java.net.URL;
 import java.net.URLClassLoader;
 
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+
 
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipEntry;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Field;
 
-class MainSploder extends URLClassLoader {
-
-  public MainSploder (URL[] urls) {
-    super(urls);
-  }
+class MainSploder {
 
   public static File getThisJar() throws Exception {
     return new File(MainSploder.class.getProtectionDomain().getCodeSource().getLocation().toURI());
@@ -32,13 +31,19 @@ class MainSploder extends URLClassLoader {
 
   public static File copyJarsFrom(File jar) throws Exception {
     File tmp = makeTmpDir();
-    ZipInputStream zis = new ZipInputStream(new FileInputStream(getThisJar()));
+    FileInputStream fis = new FileInputStream(jar);
+    ZipInputStream zis = new ZipInputStream(new BufferedInputStream(fis));
     ZipEntry e;
+    int size;
+    byte[] buffer = new byte[2048];
     while((e = zis.getNextEntry()) != null) {
       if(e.getName().endsWith(".jar")) {
         FileOutputStream os = new FileOutputStream(tmp.getAbsolutePath() + File.separator + e.getName());
-        int data = 0;
-        while((data = zis.read()) != -1) { os.write(data); }
+        BufferedOutputStream bos = new BufferedOutputStream(os, buffer.length);
+        while((size = zis.read(buffer, 0, buffer.length)) != -1) {
+          os.write(buffer, 0, size);
+        }
+        os.flush();
         os.close();
       }
     }
@@ -46,8 +51,8 @@ class MainSploder extends URLClassLoader {
     return tmp;
   }
 
-  public static URL[] getJarURLs() throws Exception {
-    File[] jars = copyJarsFrom(getThisJar()).listFiles();
+  public static URL[] getJarURLs(File jar) throws Exception {
+    File[] jars = copyJarsFrom(jar).listFiles();
     URL[] urls = new URL[jars.length];
     for(int i = 0; i < jars.length; i++) {
       String urlPath = "jar:file://" + jars[i].getAbsolutePath() + "!/";
@@ -58,23 +63,29 @@ class MainSploder extends URLClassLoader {
 
   @SuppressWarnings("unchecked")
   public static void main(String [] args) throws Exception {
-    URL[] jarUrls = getJarURLs();
-    MainSploder loader = new MainSploder(jarUrls);
-    Thread.currentThread().setContextClassLoader(loader);
+    File thisJar      = getThisJar();
+    URL[] jarUrls     = getJarURLs(thisJar);
+    ClassLoader cl    = new URLClassLoader(jarUrls, Thread.currentThread().getContextClassLoader());
 
-    Method invoke;
+    Class rtClass     = cl.loadClass("org.projectodd.shimdandy.ClojureRuntimeShim");
 
-    Class rt = loader.loadClass("clojure.lang.RT");
-    Class sym = loader.loadClass("clojure.lang.Symbol");
+    Method newRuntime = rtClass.getMethod("newRuntime", ClassLoader.class, String.class);
+    Object runtime    = newRuntime.invoke(null, cl, "$namespace$/$name$");
 
-    Method var = rt.getMethod("var", String.class, String.class);
-    Object REQUIRE = var.invoke(null, "clojure.core", "require");
-    invoke = REQUIRE.getClass().getMethod("invoke", Object.class);
-    invoke.invoke(REQUIRE, sym.getMethod("create", String.class).invoke(null, "$namespace$"));
+    Method require    = runtime.getClass().getMethod("require", new Class[]{String[].class});
 
-    Object MAIN = var.invoke(null, "$namespace$", "$name$");
-    Object APPLY = var.invoke(null, "clojure.core", "apply");
-    invoke = APPLY.getClass().getMethod("invoke", Object.class, Object.class);
-    invoke.invoke(APPLY, MAIN, args);
+    Method invoke     = runtime.getClass().getMethod("invoke", String.class, Object.class);
+
+    Object applyVar   = invoke.invoke(runtime, "clojure.core/resolve",
+                                    invoke.invoke(runtime, "clojure.core/symbol", "clojure.core/apply"));
+
+    require.invoke(runtime, new Object[]{new String[]{"$namespace$"}});
+
+    Object mainVar     = invoke.invoke(runtime, "clojure.core/resolve",
+                                   invoke.invoke(runtime, "clojure.core/symbol", "$namespace$/$name$"));
+
+    Method applyInvoke = applyVar.getClass().getMethod("invoke", Object.class, Object.class);
+
+    applyInvoke.invoke(applyVar, mainVar, args);
   }
 }
