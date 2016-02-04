@@ -35,5 +35,5 @@
                   :subs {"namespace" (namespace main-var)
                          "name" (name main-var)})
         (task/javac)
-        (task/jar :main 'adzerk.MainSploder)))
+        (task/jar :main 'adzerk.MainSploder :file file)))
 
